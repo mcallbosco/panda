@@ -1,4 +1,4 @@
-# Welcome to panda
+# Welcome to pand
 
 [panda](http://github.com/commaai/panda) is the nicest universal car interface ever.
 
