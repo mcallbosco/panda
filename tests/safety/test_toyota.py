@@ -10,6 +10,16 @@ from panda.tests.safety.common import CANPackerPanda, make_msg, ALTERNATIVE_EXPE
 MAX_ACCEL = 2.0
 MIN_ACCEL = -3.5
 
+
+def interceptor_msg(gas, addr):
+  to_send = make_msg(0, addr, 6)
+  to_send[0].data[0] = (gas & 0xFF00) >> 8
+  to_send[0].data[1] = gas & 0xFF
+  to_send[0].data[2] = (gas & 0xFF00) >> 8
+  to_send[0].data[3] = gas & 0xFF
+  return to_send
+
+
 class TestToyotaSafety(common.PandaSafetyTest, common.InterceptorSafetyTest,
                        common.TorqueSteeringSafetyTest):
 
@@ -59,11 +69,11 @@ class TestToyotaSafety(common.PandaSafetyTest, common.InterceptorSafetyTest,
     values = {("WHEEL_SPEED_%s" % n): speed for n in ["FR", "FL", "RR", "RL"]}
     return self.packer.make_can_msg_panda("WHEEL_SPEEDS", 0, values)
 
-  def _brake_msg(self, brake):
+  def _user_brake_msg(self, brake):
     values = {"BRAKE_PRESSED": brake}
     return self.packer.make_can_msg_panda("BRAKE_MODULE", 0, values)
 
-  def _gas_msg(self, gas):
+  def _user_gas_msg(self, gas):
     cruise_active = self.safety.get_controls_allowed()
     values = {"GAS_RELEASED": not gas, "CRUISE_ACTIVE": cruise_active}
     return self.packer.make_can_msg_panda("PCM_CRUISE", 0, values)
@@ -72,14 +82,11 @@ class TestToyotaSafety(common.PandaSafetyTest, common.InterceptorSafetyTest,
     values = {"CRUISE_ACTIVE": enable}
     return self.packer.make_can_msg_panda("PCM_CRUISE", 0, values)
 
-  # Toyota gas gains are the same
-  def _interceptor_msg(self, gas, addr):
-    to_send = make_msg(0, addr, 6)
-    to_send[0].data[0] = (gas & 0xFF00) >> 8
-    to_send[0].data[1] = gas & 0xFF
-    to_send[0].data[2] = (gas & 0xFF00) >> 8
-    to_send[0].data[3] = gas & 0xFF
-    return to_send
+  def _interceptor_gas_cmd(self, gas):
+    return interceptor_msg(gas, 0x200)
+
+  def _interceptor_user_gas(self, gas):
+    return interceptor_msg(gas, 0x201)
 
   def test_block_aeb(self):
     for controls_allowed in (True, False):
