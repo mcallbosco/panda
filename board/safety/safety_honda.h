@@ -10,14 +10,11 @@ const CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5}, {0x194, 0, 4}, {0x1FA, 0, 8}, {0
 const CanMsg HONDA_BOSCH_TX_MSGS[] = {{0xE4, 0, 5}, {0xE5, 0, 8}, {0x296, 1, 4}, {0x33D, 0, 5}, {0x33DA, 0, 5}, {0x33DB, 0, 8}};  // Bosch
 const CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {{0xE4, 1, 5}, {0x1DF, 1, 8}, {0x1EF, 1, 8}, {0x1FA, 1, 8}, {0x30C, 1, 8}, {0x33D, 1, 5}, {0x33DA, 1, 5}, {0x33DB, 1, 8}, {0x39F, 1, 8}, {0x18DAB0F1, 1, 8}};  // Bosch w/ gas and brakes
 
-// Roughly calculated using the offsets in openpilot +5%:
-// In openpilot: ((gas1_norm + gas2_norm)/2) > 15
-// gas_norm1 = ((gain_dbc1*gas1) + offset_dbc)
-// gas_norm2 = ((gain_dbc2*gas2) + offset_dbc)
-// assuming that 2*(gain_dbc1*gas1) == (gain_dbc2*gas2)
-// In this safety: ((gas1 + (gas2/2))/2) > THRESHOLD
-const int HONDA_GAS_INTERCEPTOR_THRESHOLD = 344;
-#define HONDA_GET_INTERCEPTOR(msg) (((GET_BYTE((msg), 0) << 8) + GET_BYTE((msg), 1) + ((GET_BYTE((msg), 2) << 8) + GET_BYTE((msg), 3)) / 2U ) / 2U) // avg between 2 tracks
+// panda interceptor threshold needs to be equivalent to openpilot threshold to avoid controls mismatches
+// If thresholds are mismatched then it is possible for panda to see the gas fall and rise while openpilot is in the pre-enabled state
+// Threshold calculated from DBC gains: round(((83.3 / 0.253984064) + (83.3 / 0.126992032)) / 2) = 492
+const int HONDA_GAS_INTERCEPTOR_THRESHOLD = 492;
+#define HONDA_GET_INTERCEPTOR(msg) (((GET_BYTE((msg), 0) << 8) + GET_BYTE((msg), 1) + (GET_BYTE((msg), 2) << 8) + GET_BYTE((msg), 3)) / 2U)  // avg between 2 tracks
 const int HONDA_BOSCH_NO_GAS_VALUE = -30000; // value sent when not requesting gas
 const int HONDA_BOSCH_GAS_MAX = 2000;
 const int HONDA_BOSCH_ACCEL_MIN = -350; // max braking == -3.5m/s2
@@ -72,12 +69,12 @@ enum {HONDA_NIDEC, HONDA_BOSCH} honda_hw = HONDA_NIDEC;
 addr_checks honda_rx_checks = {honda_nidec_addr_checks, HONDA_NIDEC_ADDR_CHECKS_LEN};
 
 
-static uint8_t honda_get_checksum(CANPacket_t *to_push) {
+static uint32_t honda_get_checksum(CANPacket_t *to_push) {
   int checksum_byte = GET_LEN(to_push) - 1U;
   return (uint8_t)(GET_BYTE(to_push, checksum_byte)) & 0xFU;
 }
 
-static uint8_t honda_compute_checksum(CANPacket_t *to_push) {
+static uint32_t honda_compute_checksum(CANPacket_t *to_push) {
   int len = GET_LEN(to_push);
   uint8_t checksum = 0U;
   unsigned int addr = GET_ADDR(to_push);
@@ -91,7 +88,7 @@ static uint8_t honda_compute_checksum(CANPacket_t *to_push) {
       checksum -= (byte & 0xFU);  // remove checksum in message
     }
   }
-  return (8U - checksum) & 0xFU;
+  return (uint8_t)((8U - checksum) & 0xFU);
 }
 
 static uint8_t honda_get_counter(CANPacket_t *to_push) {
@@ -365,10 +362,7 @@ static int honda_tx_hook(CANPacket_t *to_send, bool longitudinal_allowed) {
   return tx;
 }
 
-static const addr_checks* honda_nidec_init(int16_t param) {
-  UNUSED(param);
-  controls_allowed = false;
-  relay_malfunction_reset();
+static const addr_checks* honda_nidec_init(uint16_t param) {
   gas_interceptor_detected = 0;
   honda_hw = HONDA_NIDEC;
   honda_alt_brake_msg = false;
@@ -382,9 +376,7 @@ static const addr_checks* honda_nidec_init(int16_t param) {
   return &honda_rx_checks;
 }
 
-static const addr_checks* honda_bosch_init(int16_t param) {
-  controls_allowed = false;
-  relay_malfunction_reset();
+static const addr_checks* honda_bosch_init(uint16_t param) {
   honda_hw = HONDA_BOSCH;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);

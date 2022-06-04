@@ -5,9 +5,11 @@
 
 #include "panda.h"
 #include "can_definitions.h"
+#include "utils.h"
 
-typedef struct
-{
+#define CANFD
+
+typedef struct {
   uint32_t CNT;
 } TIM_TypeDef;
 
