@@ -131,7 +131,6 @@ bool is_car_safety_mode(uint16_t mode) {
   return (mode != SAFETY_SILENT) &&
          (mode != SAFETY_NOOUTPUT) &&
          (mode != SAFETY_ALLOUTPUT) &&
-         (mode != SAFETY_MAZDA) &&
          (mode != SAFETY_ELM327);
 }
 
